@@ -7,6 +7,7 @@ from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest, TelegramAPIError
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -141,24 +142,59 @@ async def callback_calendar_select(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(text, reply_markup=keyboard)
         await callback.answer()
         
+    except TelegramBadRequest as e:
+        error_message = str(e)
+        if "BUTTON_DATA_INVALID" in error_message or "bad request" in error_message.lower():
+            logger.warning(f"Невалидная кнопка календаря: {callback.data}, ошибка: {error_message}")
+            try:
+                await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
+            except:
+                pass
+        else:
+            logger.error(f"Ошибка Telegram API в обработчике calendar_select: {e}", exc_info=True)
+            try:
+                await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
+            except:
+                pass
+    except TelegramAPIError as e:
+        logger.error(f"Ошибка Telegram API в обработчике calendar_select: {e}", exc_info=True)
+        try:
+            await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
+        except:
+            pass
     except Exception as e:
         logger.error(f"Ошибка в обработчике calendar_select: {e}", exc_info=True)
-        await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
+        try:
+            await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
+        except:
+            pass
 
 
 @router.callback_query(F.data.startswith("time_select_"))
 async def callback_time_select(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора времени."""
     try:
+        # Проверяем, что callback_data не пустой и валидный
+        if not callback.data or len(callback.data) > 64:
+            logger.warning(f"Невалидный callback_data (длина или пустой): {callback.data}")
+            await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
+            return
+        
         # Извлекаем время из callback_data
         # Формат: "time_select_HH:MM"
         parts = callback.data.split("_", 2)  # Разделяем максимум на 2 части
         if len(parts) < 3:
-            logger.error(f"Неверный формат callback_data: {callback.data}")
-            await callback.answer("❌ Ошибка: неверный формат данных", show_alert=True)
+            logger.warning(f"Неверный формат callback_data: {callback.data}")
+            await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
             return
         
         time_str = parts[2]  # Время после "time_select_"
+        
+        # Проверяем, что время не пустое
+        if not time_str:
+            logger.warning(f"Пустое время в callback_data: {callback.data}")
+            await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
+            return
         
         # Проверяем формат времени
         try:
@@ -210,9 +246,33 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
         
         await callback.answer()
         
+    except TelegramBadRequest as e:
+        # Обработка ошибок от Telegram API (например, BUTTON_DATA_INVALID)
+        error_message = str(e)
+        if "BUTTON_DATA_INVALID" in error_message or "bad request" in error_message.lower():
+            logger.warning(f"Невалидная кнопка: {callback.data}, ошибка: {error_message}")
+            try:
+                await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
+            except:
+                pass  # Игнорируем ошибки при попытке ответить
+        else:
+            logger.error(f"Ошибка Telegram API в обработчике time_select: {e}", exc_info=True)
+            try:
+                await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
+            except:
+                pass
+    except TelegramAPIError as e:
+        logger.error(f"Ошибка Telegram API в обработчике time_select: {e}", exc_info=True)
+        try:
+            await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
+        except:
+            pass
     except Exception as e:
         logger.error(f"Ошибка в обработчике time_select: {e}", exc_info=True)
-        await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
+        try:
+            await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
+        except:
+            pass
 
 
 async def show_service_selection(callback: CallbackQuery, state: FSMContext):
