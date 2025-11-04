@@ -188,13 +188,28 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
             await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
             return
         
-        time_str = parts[2]  # Время после "time_select_"
+        time_callback = parts[2]  # Время после "time_select_" (формат: HH_MM или HH:MM для старых кнопок)
         
         # Проверяем, что время не пустое
-        if not time_str:
+        if not time_callback:
             logger.warning(f"Пустое время в callback_data: {callback.data}")
             await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
             return
+        
+        # Преобразуем формат из HH_MM обратно в HH:MM
+        # Поддерживаем оба формата для обратной совместимости
+        if "_" in time_callback:
+            time_str = time_callback.replace("_", ":")
+        elif ":" in time_callback:
+            time_str = time_callback
+        else:
+            # Если формат не распознан, пытаемся разобрать как HHMM
+            if len(time_callback) == 4:
+                time_str = f"{time_callback[:2]}:{time_callback[2:]}"
+            else:
+                logger.error(f"Неверный формат времени в callback_data: {time_callback}")
+                await callback.answer("❌ Ошибка: неверный формат времени", show_alert=True)
+                return
         
         # Проверяем формат времени
         try:
