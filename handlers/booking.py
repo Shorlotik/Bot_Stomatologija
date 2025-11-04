@@ -90,10 +90,24 @@ def get_service_keyboard(services: list[str]) -> InlineKeyboardMarkup:
 async def callback_calendar_select(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора даты в календаре."""
     try:
-        date_str = callback.data.split("_")[-1]
-        selected_date = datetime.strptime(date_str, "%Y-%m-%d")
-        tz = get_timezone()
-        selected_date = tz.localize(selected_date)
+        # Извлекаем дату из callback_data
+        # Формат: "calendar_select_YYYY-MM-DD"
+        parts = callback.data.split("_", 2)
+        if len(parts) < 3:
+            logger.error(f"Неверный формат callback_data: {callback.data}")
+            await callback.answer("❌ Ошибка: неверный формат данных", show_alert=True)
+            return
+        
+        date_str = parts[2]
+        
+        try:
+            selected_date = datetime.strptime(date_str, "%Y-%m-%d")
+            tz = get_timezone()
+            selected_date = tz.localize(selected_date)
+        except ValueError as e:
+            logger.error(f"Неверный формат даты: {date_str}, ошибка: {e}")
+            await callback.answer("❌ Ошибка: неверный формат даты", show_alert=True)
+            return
         
         # Сохраняем выбранную дату
         data = await state.get_data()
@@ -128,21 +142,46 @@ async def callback_calendar_select(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         
     except Exception as e:
-        logger.error(f"Ошибка в обработчике calendar_select: {e}")
-        await callback.answer("Произошла ошибка", show_alert=True)
+        logger.error(f"Ошибка в обработчике calendar_select: {e}", exc_info=True)
+        await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("time_select_"))
 async def callback_time_select(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора времени."""
     try:
-        time_str = callback.data.split("_")[-1]
+        # Извлекаем время из callback_data
+        # Формат: "time_select_HH:MM"
+        parts = callback.data.split("_", 2)  # Разделяем максимум на 2 части
+        if len(parts) < 3:
+            logger.error(f"Неверный формат callback_data: {callback.data}")
+            await callback.answer("❌ Ошибка: неверный формат данных", show_alert=True)
+            return
+        
+        time_str = parts[2]  # Время после "time_select_"
+        
+        # Проверяем формат времени
+        try:
+            hour, minute = map(int, time_str.split(':'))
+            if not (0 <= hour < 24 and 0 <= minute < 60):
+                raise ValueError("Неверный формат времени")
+        except (ValueError, AttributeError) as e:
+            logger.error(f"Неверный формат времени: {time_str}, ошибка: {e}")
+            await callback.answer("❌ Ошибка: неверный формат времени", show_alert=True)
+            return
         
         data = await state.get_data()
         selected_date = data.get("selected_date")
         
         if not selected_date:
-            await callback.answer("❌ Ошибка: дата не выбрана", show_alert=True)
+            await callback.answer("❌ Ошибка: дата не выбрана. Начните запись заново.", show_alert=True)
+            # Возвращаем в главное меню
+            await state.clear()
+            from utils.formatters import format_welcome_message
+            from keyboards.main import get_main_menu_keyboard
+            text = format_welcome_message()
+            keyboard = get_main_menu_keyboard()
+            await callback.message.edit_text(text, reply_markup=keyboard)
             return
         
         # Проверяем доступность слота
@@ -150,7 +189,13 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
         service_duration = data.get("service_duration", 60)
         
         if not is_time_slot_available(db, selected_date, time_str, service_duration):
-            await callback.answer("❌ Это время уже занято", show_alert=True)
+            await callback.answer("❌ Это время уже занято. Выберите другое время.", show_alert=True)
+            # Обновляем список доступных слотов
+            time_slots = calculate_time_slots(db, selected_date, service_duration, data.get("is_brt", False))
+            if time_slots:
+                text = f"🕐 Выберите время:\n\n📅 Дата: {format_date(selected_date, 'date_only')}"
+                keyboard = get_time_slots_keyboard(time_slots)
+                await callback.message.edit_text(text, reply_markup=keyboard)
             return
         
         await state.update_data(selected_time=time_str)
@@ -166,8 +211,8 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         
     except Exception as e:
-        logger.error(f"Ошибка в обработчике time_select: {e}")
-        await callback.answer("Произошла ошибка", show_alert=True)
+        logger.error(f"Ошибка в обработчике time_select: {e}", exc_info=True)
+        await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
 
 
 async def show_service_selection(callback: CallbackQuery, state: FSMContext):
