@@ -7,7 +7,6 @@ from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.exceptions import TelegramBadRequest, TelegramAPIError
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -91,24 +90,10 @@ def get_service_keyboard(services: list[str]) -> InlineKeyboardMarkup:
 async def callback_calendar_select(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора даты в календаре."""
     try:
-        # Извлекаем дату из callback_data
-        # Формат: "calendar_select_YYYY-MM-DD"
-        parts = callback.data.split("_", 2)
-        if len(parts) < 3:
-            logger.error(f"Неверный формат callback_data: {callback.data}")
-            await callback.answer("❌ Ошибка: неверный формат данных", show_alert=True)
-            return
-        
-        date_str = parts[2]
-        
-        try:
-            selected_date = datetime.strptime(date_str, "%Y-%m-%d")
-            tz = get_timezone()
-            selected_date = tz.localize(selected_date)
-        except ValueError as e:
-            logger.error(f"Неверный формат даты: {date_str}, ошибка: {e}")
-            await callback.answer("❌ Ошибка: неверный формат даты", show_alert=True)
-            return
+        date_str = callback.data.split("_")[-1]
+        selected_date = datetime.strptime(date_str, "%Y-%m-%d")
+        tz = get_timezone()
+        selected_date = tz.localize(selected_date)
         
         # Сохраняем выбранную дату
         data = await state.get_data()
@@ -142,80 +127,26 @@ async def callback_calendar_select(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(text, reply_markup=keyboard)
         await callback.answer()
         
-    except TelegramBadRequest as e:
-        error_message = str(e)
-        if "BUTTON_DATA_INVALID" in error_message or "bad request" in error_message.lower():
-            logger.warning(f"Невалидная кнопка календаря: {callback.data}, ошибка: {error_message}")
-            try:
-                await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
-            except:
-                pass
-        else:
-            logger.error(f"Ошибка Telegram API в обработчике calendar_select: {e}", exc_info=True)
-            try:
-                await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
-            except:
-                pass
-    except TelegramAPIError as e:
-        logger.error(f"Ошибка Telegram API в обработчике calendar_select: {e}", exc_info=True)
-        try:
-            await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
-        except:
-            pass
     except Exception as e:
-        logger.error(f"Ошибка в обработчике calendar_select: {e}", exc_info=True)
-        try:
-            await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
-        except:
-            pass
+        logger.error(f"Ошибка в обработчике calendar_select: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("time_select_"))
 async def callback_time_select(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора времени."""
     try:
-        # Проверяем, что callback_data не пустой и валидный
-        if not callback.data or len(callback.data) > 64:
-            logger.warning(f"Невалидный callback_data (длина или пустой): {callback.data}")
-            await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
-            return
+        logger.debug(f"Обработка выбора времени: callback.data = {callback.data}")
         
-        # Извлекаем время из callback_data
-        # Формат: "time_select_HH:MM"
-        parts = callback.data.split("_", 2)  # Разделяем максимум на 2 части
-        if len(parts) < 3:
-            logger.warning(f"Неверный формат callback_data: {callback.data}")
-            await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
-            return
-        
-        time_callback = parts[2]  # Время после "time_select_" (формат: HH_MM или HH:MM для старых кнопок)
-        
-        # Проверяем, что время не пустое
-        if not time_callback:
-            logger.warning(f"Пустое время в callback_data: {callback.data}")
-            await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
-            return
-        
-        # Преобразуем формат из HH_MM обратно в HH:MM
-        # Поддерживаем оба формата для обратной совместимости
-        if "_" in time_callback:
-            time_str = time_callback.replace("_", ":")
-        elif ":" in time_callback:
-            time_str = time_callback
-        else:
-            # Если формат не распознан, пытаемся разобрать как HHMM
-            if len(time_callback) == 4:
-                time_str = f"{time_callback[:2]}:{time_callback[2:]}"
-            else:
-                logger.error(f"Неверный формат времени в callback_data: {time_callback}")
-                await callback.answer("❌ Ошибка: неверный формат времени", show_alert=True)
-                return
+        # Парсим время из callback_data (формат: time_select_HH:MM)
+        time_str = callback.data.replace("time_select_", "")
+        logger.debug(f"Извлечено время: {time_str}")
         
         # Проверяем формат времени
         try:
             hour, minute = map(int, time_str.split(':'))
             if not (0 <= hour < 24 and 0 <= minute < 60):
-                raise ValueError("Неверный формат времени")
+                raise ValueError("Invalid time format")
         except (ValueError, AttributeError) as e:
             logger.error(f"Неверный формат времени: {time_str}, ошибка: {e}")
             await callback.answer("❌ Ошибка: неверный формат времени", show_alert=True)
@@ -225,31 +156,23 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
         selected_date = data.get("selected_date")
         
         if not selected_date:
-            await callback.answer("❌ Ошибка: дата не выбрана. Начните запись заново.", show_alert=True)
-            # Возвращаем в главное меню
-            await state.clear()
-            from utils.formatters import format_welcome_message
-            from keyboards.main import get_main_menu_keyboard
-            text = format_welcome_message()
-            keyboard = get_main_menu_keyboard()
-            await callback.message.edit_text(text, reply_markup=keyboard)
+            logger.warning(f"Дата не выбрана в состоянии. Данные состояния: {data}")
+            await callback.answer("❌ Ошибка: дата не выбрана", show_alert=True)
             return
+        
+        logger.debug(f"Выбранная дата: {selected_date}, время: {time_str}")
         
         # Проверяем доступность слота
         db = next(get_db())
         service_duration = data.get("service_duration", 60)
         
         if not is_time_slot_available(db, selected_date, time_str, service_duration):
-            await callback.answer("❌ Это время уже занято. Выберите другое время.", show_alert=True)
-            # Обновляем список доступных слотов
-            time_slots = calculate_time_slots(db, selected_date, service_duration, data.get("is_brt", False))
-            if time_slots:
-                text = f"🕐 Выберите время:\n\n📅 Дата: {format_date(selected_date, 'date_only')}"
-                keyboard = get_time_slots_keyboard(time_slots)
-                await callback.message.edit_text(text, reply_markup=keyboard)
+            logger.warning(f"Время {time_str} уже занято на дату {selected_date}")
+            await callback.answer("❌ Это время уже занято", show_alert=True)
             return
         
         await state.update_data(selected_time=time_str)
+        logger.info(f"Время {time_str} успешно выбрано для даты {selected_date}")
         
         # Если услуга уже выбрана, переходим к подтверждению
         if data.get("service_type"):
@@ -259,46 +182,11 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
             await state.set_state(BookingStates.waiting_for_service)
             await show_service_selection(callback, state)
         
-        await callback.answer()
+        await callback.answer(f"✅ Выбрано время: {time_str}")
         
-    except TelegramBadRequest as e:
-        # Обработка ошибок от Telegram API (например, BUTTON_DATA_INVALID)
-        error_message = str(e)
-        if "BUTTON_DATA_INVALID" in error_message or "bad request" in error_message.lower():
-            logger.warning(f"Невалидная кнопка: {callback.data}, ошибка: {error_message}")
-            try:
-                await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
-            except:
-                pass  # Игнорируем ошибки при попытке ответить
-        else:
-            logger.error(f"Ошибка Telegram API в обработчике time_select: {e}", exc_info=True)
-            try:
-                await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
-            except:
-                pass
-    except TelegramAPIError as e:
-        logger.error(f"Ошибка Telegram API в обработчике time_select: {e}", exc_info=True)
-        try:
-            await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
-        except:
-            pass
     except Exception as e:
-        # Проверяем, не является ли это ошибкой BUTTON_DATA_INVALID в другом формате
-        error_str = str(e)
-        error_type = type(e).__name__
-        
-        if "BUTTON_DATA_INVALID" in error_str or "bad request" in error_str.lower():
-            logger.warning(f"Невалидная кнопка (через Exception): {callback.data}, тип: {error_type}, ошибка: {error_str}")
-            try:
-                await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
-            except:
-                pass
-        else:
-            logger.error(f"Ошибка в обработчике time_select: {e}, тип: {error_type}", exc_info=True)
-            try:
-                await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
-            except:
-                pass
+        logger.error(f"Ошибка в обработчике time_select: {e}", exc_info=True)
+        await callback.answer("❌ Произошла ошибка при выборе времени", show_alert=True)
 
 
 async def show_service_selection(callback: CallbackQuery, state: FSMContext):
