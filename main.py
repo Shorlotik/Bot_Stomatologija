@@ -13,6 +13,7 @@ from utils.logger import logger
 
 async def main():
     """Основная функция запуска бота."""
+    bot = None
     try:
         # Валидация конфигурации
         Config.validate()
@@ -70,7 +71,8 @@ async def main():
         logger.error(f"Критическая ошибка при запуске бота: {e}")
         raise
     finally:
-        await bot.session.close()
+        if bot:
+            await bot.session.close()
 
 
 if __name__ == "__main__":
