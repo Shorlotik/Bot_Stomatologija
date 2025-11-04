@@ -52,3 +52,10 @@ logs/
 .DS_Store
 Thumbs.db
 
+
+# Development files
+01-create-prd.md
+02-generate-tasks.md
+03-process-task-list.md
+tasks/
+.env.server
