@@ -138,8 +138,10 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
     try:
         logger.debug(f"Обработка выбора времени: callback.data = {callback.data}")
         
-        # Парсим время из callback_data (формат: time_select_HH:MM)
+        # Парсим время из callback_data (формат: time_select_HH-MM или time_select_HH:MM)
         time_str = callback.data.replace("time_select_", "")
+        # Заменяем дефис обратно на двоеточие (если был заменен)
+        time_str = time_str.replace("-", ":")
         logger.debug(f"Извлечено время: {time_str}")
         
         # Проверяем формат времени

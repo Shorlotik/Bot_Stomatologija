@@ -148,8 +148,8 @@ def get_time_slots_keyboard(time_slots: List[str], selected_time: str = None) ->
             row = []
         
         prefix = "✅ " if time_slot == selected_time else ""
-        # Заменяем двоеточие на подчеркивание для callback_data (Telegram API не принимает двоеточие)
-        time_callback = time_slot.replace(":", "_")
+        # Заменяем двоеточие на дефис для callback_data (Telegram не принимает двоеточие)
+        time_callback = time_slot.replace(":", "-")
         row.append(InlineKeyboardButton(
             text=f"{prefix}{time_slot}",
             callback_data=f"time_select_{time_callback}"
