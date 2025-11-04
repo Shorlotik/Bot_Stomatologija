@@ -564,7 +564,10 @@ async def callback_create_appointment_time(callback: CallbackQuery, state: FSMCo
     try:
         from handlers.booking import SERVICE_DURATIONS
         
-        time_str = callback.data.split("_")[-1]
+        # Парсим время из callback_data (формат: time_select_HH-MM или time_select_HH:MM)
+        time_str = callback.data.replace("time_select_", "")
+        # Заменяем дефис обратно на двоеточие (если был заменен)
+        time_str = time_str.replace("-", ":")
         await state.update_data(create_selected_time=time_str)
         await state.set_state(AdminStates.create_appointment_service)
         
