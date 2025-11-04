@@ -66,13 +66,32 @@ def get_service_keyboard(services: list[str]) -> InlineKeyboardMarkup:
     keyboard = []
     row = []
     
+    # Создаем маппинг для сокращенных callback_data
+    service_mapping = {
+        "Профессиональная чистка зубов": "clean",
+        "Выявление дефицитов в организме по зубам": "deficit_teeth",
+        "Выявление дефицитов при помощи БРТ": "deficit_brt",
+        "Подбор витаминов и минералов": "vitamins",
+    }
+    
     for i, service in enumerate(services):
         if i > 0 and i % 2 == 0:
             keyboard.append(row)
             row = []
+        
+        # Используем сокращенный callback_data для длинных названий
+        if service in service_mapping:
+            callback_data = f"service_select_{service_mapping[service]}"
+        else:
+            # Для коротких названий используем оригинал, но проверяем длину
+            callback_data = f"service_select_{service}"
+            if len(callback_data.encode('utf-8')) > 64:
+                # Если все равно длинный, используем индекс
+                callback_data = f"service_select_{i}"
+        
         row.append(InlineKeyboardButton(
             text=service,
-            callback_data=f"service_select_{service}"
+            callback_data=callback_data
         ))
     
     if row:
@@ -124,7 +143,26 @@ async def callback_calendar_select(callback: CallbackQuery, state: FSMContext):
         text = f"🕐 Выберите время:\n\n📅 Дата: {format_date(selected_date, 'date_only')}"
         keyboard = get_time_slots_keyboard(time_slots)
         
-        await callback.message.edit_text(text, reply_markup=keyboard)
+        # Пробуем отредактировать, если не получится - удаляем и отправляем новое
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard)
+        except Exception as edit_error:
+            logger.warning(f"Не удалось отредактировать сообщение при выборе даты: {edit_error}, отправляем новое")
+            try:
+                await callback.message.delete()
+            except:
+                pass
+            try:
+                await callback.bot.send_message(
+                    chat_id=callback.from_user.id,
+                    text=text,
+                    reply_markup=keyboard
+                )
+            except Exception as send_error:
+                logger.error(f"Ошибка при отправке нового сообщения: {send_error}")
+                await callback.answer("❌ Произошла ошибка при выборе времени", show_alert=True)
+                return
+        
         await callback.answer()
         
     except Exception as e:
@@ -137,6 +175,31 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора времени."""
     try:
         logger.debug(f"Обработка выбора времени: callback.data = {callback.data}")
+        
+        # Получаем текущее состояние
+        current_state = await state.get_state()
+        logger.debug(f"Текущее состояние FSM: {current_state}")
+        
+        # Получаем данные состояния
+        data = await state.get_data()
+        logger.debug(f"Данные состояния: {data}")
+        
+        selected_date = data.get("selected_date")
+        
+        # Если дата не найдена, пытаемся восстановить из callback или запросить у пользователя
+        if not selected_date:
+            logger.warning(f"Дата не выбрана в состоянии. Данные состояния: {data}")
+            
+            # Пробуем получить дату из состояния или предложить выбрать заново
+            await callback.answer("❌ Дата не выбрана. Пожалуйста, выберите дату заново", show_alert=True)
+            
+            # Возвращаем пользователя к выбору даты
+            await state.set_state(BookingStates.waiting_for_date)
+            is_brt = data.get("is_brt", False)
+            text = "📅 Выберите дату:" + (" (только понедельники)" if is_brt else "")
+            keyboard = get_calendar_keyboard()
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            return
         
         # Парсим время из callback_data (формат: time_select_HH-MM или time_select_HH:MM)
         time_str = callback.data.replace("time_select_", "")
@@ -152,14 +215,6 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
         except (ValueError, AttributeError) as e:
             logger.error(f"Неверный формат времени: {time_str}, ошибка: {e}")
             await callback.answer("❌ Ошибка: неверный формат времени", show_alert=True)
-            return
-        
-        data = await state.get_data()
-        selected_date = data.get("selected_date")
-        
-        if not selected_date:
-            logger.warning(f"Дата не выбрана в состоянии. Данные состояния: {data}")
-            await callback.answer("❌ Ошибка: дата не выбрана", show_alert=True)
             return
         
         logger.debug(f"Выбранная дата: {selected_date}, время: {time_str}")
@@ -193,25 +248,66 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
 
 async def show_service_selection(callback: CallbackQuery, state: FSMContext):
     """Показывает выбор услуги."""
-    data = await state.get_data()
-    is_brt = data.get("is_brt", False)
-    
-    if is_brt:
-        services = ["БРТ"]
-    else:
-        # Определяем услуги в зависимости от типа записи
-        service_type_context = data.get("service_type_context", "dentistry")
-        if service_type_context == "dentistry":
-            from handlers.dentistry import DENTISTRY_SERVICES
-            services = DENTISTRY_SERVICES
+    try:
+        data = await state.get_data()
+        is_brt = data.get("is_brt", False)
+        
+        if is_brt:
+            services = ["БРТ"]
         else:
-            from handlers.nutrition import NUTRITION_SERVICES
-            services = NUTRITION_SERVICES
-    
-    text = "💼 Выберите тип услуги:"
-    keyboard = get_service_keyboard(services)
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
+            # Определяем услуги в зависимости от типа записи
+            service_type_context = data.get("service_type_context", "dentistry")
+            if service_type_context == "dentistry":
+                from handlers.dentistry import DENTISTRY_SERVICES
+                services = DENTISTRY_SERVICES
+            else:
+                from handlers.nutrition import NUTRITION_SERVICES
+                services = NUTRITION_SERVICES
+        
+        text = "💼 Выберите тип услуги:"
+        keyboard = get_service_keyboard(services)
+        
+        # Проверяем валидность callback_data перед отправкой
+        for row in keyboard.inline_keyboard:
+            for button in row:
+                cb_len = len(button.callback_data.encode('utf-8'))
+                if cb_len > 64:
+                    logger.error(f"Слишком длинный callback_data: {button.callback_data} ({cb_len} байт)")
+                    raise ValueError(f"Callback data слишком длинный: {cb_len} байт")
+                logger.debug(f"Callback data: {button.callback_data} ({cb_len} байт)")
+        
+        # Пробуем сначала отредактировать, если не получится - удаляем и отправляем новое
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            logger.info("Сообщение с выбором услуги успешно отредактировано")
+        except Exception as edit_error:
+            logger.warning(f"Не удалось отредактировать сообщение: {edit_error}, отправляем новое")
+            # Удаляем старое сообщение и отправляем новое
+            try:
+                await callback.message.delete()
+                logger.debug("Старое сообщение удалено")
+            except Exception as del_error:
+                logger.warning(f"Не удалось удалить старое сообщение: {del_error}")
+            try:
+                # Отправляем новое сообщение используя callback.bot
+                await callback.bot.send_message(
+                    chat_id=callback.from_user.id,
+                    text=text,
+                    reply_markup=keyboard
+                )
+                logger.info("Новое сообщение с выбором услуги отправлено")
+            except Exception as send_error:
+                logger.error(f"Ошибка при отправке нового сообщения: {send_error}", exc_info=True)
+                # Если и это не работает, просто отправляем ответ и новое сообщение без клавиатуры
+                await callback.answer("✅ Время выбрано", show_alert=False)
+                # Отправляем простое сообщение с текстом
+                await callback.bot.send_message(
+                    chat_id=callback.from_user.id,
+                    text="💼 Выберите услугу, отправив её название в сообщении:\n\n" + "\n".join([f"• {s}" for s in services])
+                )
+    except Exception as e:
+        logger.error(f"Ошибка в show_service_selection: {e}", exc_info=True)
+        await callback.answer("❌ Произошла ошибка при выборе услуги", show_alert=True)
 
 
 
@@ -226,6 +322,26 @@ async def show_confirmation(callback: CallbackQuery, state: FSMContext):
     selected_time = data.get("selected_time", "")
     service_type = data.get("service_type", "")
     comment = data.get("comment", "")
+    
+    # Проверяем, что все обязательные данные заполнены
+    if not full_name or not phone:
+        logger.warning(f"Не все данные заполнены: full_name={bool(full_name)}, phone={bool(phone)}")
+        await callback.answer("❌ Ошибка: не все данные заполнены. Пожалуйста, начните запись заново.", show_alert=True)
+        # Возвращаемся к началу процесса
+        await state.set_state(BookingStates.waiting_for_name)
+        text = "📝 **Запись на приём**\n\nПожалуйста, введите ваше ФИО:"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+        ])
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard)
+        except:
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=text,
+                reply_markup=keyboard
+            )
+        return
     
     if selected_date:
         hour, minute = map(int, selected_time.split(':'))
@@ -242,7 +358,19 @@ async def show_confirmation(callback: CallbackQuery, state: FSMContext):
         text = f"{appointment_text}\n\n✅ Проверьте данные и подтвердите запись:"
         keyboard = get_confirmation_keyboard()
         
-        await callback.message.edit_text(text, reply_markup=keyboard)
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard)
+        except Exception as e:
+            logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+            try:
+                await callback.message.delete()
+            except:
+                pass
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=text,
+                reply_markup=keyboard
+            )
 
 
 @router.callback_query(F.data == "booking_confirm")
@@ -559,7 +687,45 @@ async def callback_booking_edit(callback: CallbackQuery, state: FSMContext):
 async def callback_service_select(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора услуги."""
     try:
-        service_type = callback.data.replace("service_select_", "")
+        # Получаем сокращенный код из callback_data
+        service_code = callback.data.replace("service_select_", "")
+        
+        # Обратный маппинг для сокращенных кодов
+        code_to_service = {
+            "clean": "Профессиональная чистка зубов",
+            "deficit_teeth": "Выявление дефицитов в организме по зубам",
+            "deficit_brt": "Выявление дефицитов при помощи БРТ",
+            "vitamins": "Подбор витаминов и минералов",
+        }
+        
+        # Если это сокращенный код, получаем полное название
+        if service_code in code_to_service:
+            service_type = code_to_service[service_code]
+        else:
+            # Пробуем найти по полному названию или по индексу
+            data = await state.get_data()
+            service_type_context = data.get("service_type_context", "dentistry")
+            if service_type_context == "dentistry":
+                from handlers.dentistry import DENTISTRY_SERVICES
+                services = DENTISTRY_SERVICES
+            else:
+                from handlers.nutrition import NUTRITION_SERVICES
+                services = NUTRITION_SERVICES
+            
+            # Если это число (индекс), используем его
+            try:
+                index = int(service_code)
+                if 0 <= index < len(services):
+                    service_type = services[index]
+                else:
+                    service_type = service_code  # Fallback
+            except ValueError:
+                # Пробуем найти по полному названию
+                if service_code in services:
+                    service_type = service_code
+                else:
+                    service_type = service_code  # Fallback
+        
         service_duration = SERVICE_DURATIONS.get(service_type, 60)
         
         await state.update_data(

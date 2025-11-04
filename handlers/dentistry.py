@@ -128,22 +128,8 @@ async def callback_dentistry_contacts(callback: CallbackQuery):
         await callback.answer("Произошла ошибка", show_alert=True)
 
 
-@router.callback_query(F.data == "dentistry_book")
-async def callback_dentistry_book(callback: CallbackQuery):
-    """Обработчик начала процесса записи к стоматологу."""
-    try:
-        text = "📅 **Запись на приём к стоматологу**\n\nВыберите дату:"
-        keyboard = get_calendar_keyboard()
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=keyboard
-        )
-        await callback.answer()
-        # TODO: Здесь будет сохранение состояния для процесса записи
-    except Exception as e:
-        logger.error(f"Ошибка в обработчике dentistry_book: {e}")
-        await callback.answer("Произошла ошибка", show_alert=True)
+# Обработчик dentistry_book перенесен в handlers/booking.py
+# чтобы обеспечить правильный порядок шагов (имя -> телефон -> дата -> время -> услуга)
 
 
 def register_dentistry_handlers(dp):
