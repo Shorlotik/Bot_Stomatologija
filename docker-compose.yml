@@ -1,0 +1,47 @@
+# version: '3.8'  # Удалено для совместимости с docker-compose 1.29
+
+services:
+  bot:
+    build: .
+    container_name: telegram_bot_stomatolog
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Сохраняем базу данных на хосте (создастся автоматически)
+      - ./database:/app/database
+      # Сохраняем логи на хосте
+      - ./logs:/app/logs
+      # Сохраняем токены Google OAuth (создастся автоматически при первой авторизации)
+      - ./token.json:/app/token.json
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Опционально: если используете PostgreSQL вместо SQLite
+    # depends_on:
+    #   - postgres
+    networks:
+      - bot_network
+
+  # Опционально: PostgreSQL для production
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: bot_postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: ${POSTGRES_DB:-bot_db}
+  #     POSTGRES_USER: ${POSTGRES_USER:-bot_user}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bot_password}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - bot_network
+
+networks:
+  bot_network:
+    driver: bridge
+
+# Опционально: для PostgreSQL
+# volumes:
+#   postgres_data:
+
+
