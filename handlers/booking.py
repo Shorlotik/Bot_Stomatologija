@@ -268,11 +268,22 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
         except:
             pass
     except Exception as e:
-        logger.error(f"Ошибка в обработчике time_select: {e}", exc_info=True)
-        try:
-            await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
-        except:
-            pass
+        # Проверяем, не является ли это ошибкой BUTTON_DATA_INVALID в другом формате
+        error_str = str(e)
+        error_type = type(e).__name__
+        
+        if "BUTTON_DATA_INVALID" in error_str or "bad request" in error_str.lower():
+            logger.warning(f"Невалидная кнопка (через Exception): {callback.data}, тип: {error_type}, ошибка: {error_str}")
+            try:
+                await callback.answer("❌ Кнопка устарела. Начните запись заново.", show_alert=True)
+            except:
+                pass
+        else:
+            logger.error(f"Ошибка в обработчике time_select: {e}, тип: {error_type}", exc_info=True)
+            try:
+                await callback.answer("Произошла ошибка. Попробуйте начать запись заново.", show_alert=True)
+            except:
+                pass
 
 
 async def show_service_selection(callback: CallbackQuery, state: FSMContext):
