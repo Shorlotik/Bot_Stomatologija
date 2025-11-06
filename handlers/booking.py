@@ -853,6 +853,34 @@ async def callback_back_to_name(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(F.data == "booking_back_to_phone")
+async def callback_back_to_phone(callback: CallbackQuery, state: FSMContext):
+    """Обработчик возврата к вводу телефона."""
+    await state.set_state(BookingStates.waiting_for_phone)
+    text = "📞 Введите ваш номер телефона:\n\nФормат: +375291234567 или 80291234567"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_name"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+        ]
+    ])
+    
+    try:
+        edited_msg = await callback.message.edit_text(text, reply_markup=keyboard)
+        if edited_msg:
+            await state.update_data(bot_message_id=edited_msg.message_id)
+    except Exception as e:
+        logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+        sent_msg = await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=text,
+            reply_markup=keyboard
+        )
+        if sent_msg:
+            await state.update_data(bot_message_id=sent_msg.message_id)
+    await callback.answer()
+
+
 @router.callback_query(F.data == "booking_back_to_date")
 async def callback_back_to_date(callback: CallbackQuery, state: FSMContext):
     """Обработчик возврата к выбору даты."""
@@ -864,6 +892,46 @@ async def callback_back_to_date(callback: CallbackQuery, state: FSMContext):
     keyboard = get_calendar_keyboard()
     
     await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "booking_back_to_time")
+async def callback_back_to_time(callback: CallbackQuery, state: FSMContext):
+    """Обработчик возврата к выбору времени."""
+    data = await state.get_data()
+    selected_date = data.get("selected_date")
+    is_brt = data.get("is_brt", False)
+    service_duration = data.get("service_duration", 60)
+    
+    if not selected_date:
+        await callback.answer("❌ Дата не выбрана", show_alert=True)
+        return
+    
+    await state.set_state(BookingStates.waiting_for_time)
+    
+    db = next(get_db())
+    time_slots = calculate_time_slots(db, selected_date, service_duration, is_brt)
+    
+    if not time_slots:
+        await callback.answer("❌ На эту дату нет свободных слотов", show_alert=True)
+        return
+    
+    text = f"🕐 Выберите время:\n\n📅 Дата: {format_date(selected_date, 'date_only')}"
+    keyboard = get_time_slots_keyboard(time_slots)
+    
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception as e:
+        logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+        try:
+            await callback.message.delete()
+        except:
+            pass
+        await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=text,
+            reply_markup=keyboard
+        )
     await callback.answer()
 
 
