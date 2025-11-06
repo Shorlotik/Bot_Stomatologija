@@ -570,7 +570,10 @@ async def process_name(message: Message, state: FSMContext):
         await message.answer(
             get_name_validation_error(),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+                [
+                    InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_service"),
+                    InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+                ]
             ])
         )
         return
@@ -624,7 +627,10 @@ async def process_phone(message: Message, state: FSMContext):
         await message.answer(
             get_phone_validation_error(),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+                [
+                    InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_name"),
+                    InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+                ]
             ])
         )
         return
