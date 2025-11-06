@@ -5,7 +5,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from keyboards.main import get_back_to_main_keyboard
-from keyboards.booking import get_calendar_keyboard
+# from keyboards.booking import get_calendar_keyboard  # Не используется, процесс записи в booking.py
 from utils.formatters import format_info_message
 from utils.logger import logger
 
@@ -146,22 +146,8 @@ async def callback_nutrition_info(callback: CallbackQuery):
         await callback.answer("Произошла ошибка", show_alert=True)
 
 
-@router.callback_query(F.data == "nutrition_consultation")
-async def callback_nutrition_consultation(callback: CallbackQuery):
-    """Обработчик начала процесса записи на консультацию нутрициолога."""
-    try:
-        text = "📅 **Запись на консультацию к нутрициологу**\n\nВыберите дату:"
-        keyboard = get_calendar_keyboard()
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=keyboard
-        )
-        await callback.answer()
-        # TODO: Здесь будет сохранение состояния для процесса записи
-    except Exception as e:
-        logger.error(f"Ошибка в обработчике nutrition_consultation: {e}")
-        await callback.answer("Произошла ошибка", show_alert=True)
+# Обработчик nutrition_consultation перенесен в handlers/booking.py
+# для единообразного процесса записи (выбор услуги -> ФИО -> телефон -> дата -> время)
 
 
 @router.callback_query(F.data == "nutrition_brt")
