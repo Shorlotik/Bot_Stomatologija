@@ -718,7 +718,10 @@ async def callback_booking_edit(callback: CallbackQuery, state: FSMContext):
     await state.set_state(BookingStates.waiting_for_comment)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="booking_skip_comment")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_time"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+        ]
     ])
     await callback.message.edit_text(
         "📝 Введите комментарий (или нажмите 'Пропустить'):",

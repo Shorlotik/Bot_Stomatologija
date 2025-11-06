@@ -119,8 +119,9 @@ def get_calendar_keyboard(selected_date: datetime = None, month_offset: int = 0)
     
     keyboard.extend(weeks)
     
-    # Кнопка отмены
+    # Кнопки навигации
     keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_phone"),
         InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
     ])
     
@@ -180,7 +181,8 @@ def get_confirmation_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
         ],
         [
-            InlineKeyboardButton(text="⬅️ Изменить данные", callback_data="booking_edit")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_time"),
+            InlineKeyboardButton(text="✏️ Изменить данные", callback_data="booking_edit")
         ]
     ])
     return keyboard
