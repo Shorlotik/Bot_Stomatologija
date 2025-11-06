@@ -583,6 +583,9 @@ async def callback_booking_cancel(callback: CallbackQuery, state: FSMContext):
 async def callback_start_booking(callback: CallbackQuery, state: FSMContext):
     """Начинает процесс записи на приём."""
     try:
+        # Очищаем предыдущее состояние при новом старте
+        await state.clear()
+        
         # Определяем тип записи
         is_brt = False
         service_type_context = "dentistry" if callback.data == "dentistry_book" else "nutrition"
@@ -907,8 +910,9 @@ async def callback_back_to_service(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     logger.info(f"Возврат к выбору услуги для пользователя {callback.from_user.id}. Текущие данные: service_type={data.get('service_type')}, full_name={data.get('full_name')}, phone={data.get('phone')}")
     
-    # Очищаем только service_type при возврате к выбору услуги, остальные данные сохраняем
+    # Очищаем service_type при возврате к выбору услуги, остальные данные сохраняем
     # (на случай, если пользователь хочет изменить только услугу)
+    await state.update_data(service_type=None)
     await state.set_state(BookingStates.waiting_for_service)
     await show_service_selection(callback, state)
     await callback.answer()
@@ -973,14 +977,55 @@ async def callback_back_to_phone(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "booking_back_to_date")
 async def callback_back_to_date(callback: CallbackQuery, state: FSMContext):
     """Обработчик возврата к выбору даты."""
-    await state.set_state(BookingStates.waiting_for_date)
+    # Проверяем, что ФИО и телефон уже введены
     data = await state.get_data()
+    full_name = data.get("full_name", "")
+    phone = data.get("phone", "")
+    service_type = data.get("service_type", "")
+    
+    if not full_name or not phone or not service_type:
+        logger.warning(f"Попытка вернуться к выбору даты без заполненных данных: full_name={bool(full_name)}, phone={bool(phone)}, service_type={bool(service_type)}")
+        await callback.answer("❌ Сначала введите ФИО и телефон", show_alert=True)
+        # Возвращаемся к вводу ФИО
+        if not full_name:
+            await state.set_state(BookingStates.waiting_for_name)
+            text = "📝 **Запись на приём**\n\nПожалуйста, введите ваше ФИО:"
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_service"),
+                    InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+                ]
+            ])
+            try:
+                await callback.message.edit_text(text, reply_markup=keyboard)
+            except:
+                await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+        elif not phone:
+            await state.set_state(BookingStates.waiting_for_phone)
+            text = "📞 Введите ваш номер телефона:\n\nФормат: +375291234567 или 80291234567"
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_name"),
+                    InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+                ]
+            ])
+            try:
+                await callback.message.edit_text(text, reply_markup=keyboard)
+            except:
+                await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+        return
+    
+    await state.set_state(BookingStates.waiting_for_date)
     is_brt = data.get("is_brt", False)
     
     text = "📅 Выберите дату:" + (" (только понедельники)" if is_brt else "")
     keyboard = get_calendar_keyboard()
     
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception as e:
+        logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+        await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
     await callback.answer()
 
 
