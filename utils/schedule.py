@@ -13,17 +13,19 @@ from utils.logger import logger
 # Базовое расписание работы стоматолога
 BASE_SCHEDULE = {
     0: None,  # Понедельник - выходной
-    1: ("10:00", "18:00"),  # Вторник
-    2: ("10:00", "18:00"),  # Среда
+    1: ("13:00", "19:00"),  # Вторник
+    2: ("13:00", "19:00"),  # Среда
     3: ("13:00", "19:00"),  # Четверг
-    4: ("13:00", "19:00"),  # Пятница
+    4: ("09:00", "15:00"),  # Пятница
     5: ("09:00", "15:00"),  # Суббота
     6: None,  # Воскресенье - выходной
 }
 
 # Расписание БРТ (только понедельник)
+# Фиксированные времена для БРТ
+BRT_TIME_SLOTS = ["13:00", "14:30", "16:00", "17:30"]
 BRT_SCHEDULE = {
-    0: ("11:00", "15:00"),  # Понедельник
+    0: ("13:00", "17:30"),  # Понедельник
 }
 
 # Продолжительность услуг в минутах (по умолчанию)
@@ -151,6 +153,36 @@ def calculate_time_slots(
     # Проверяем доступность даты
     if not is_date_available(db, date):
         return []
+    
+    # Для БРТ используем фиксированные времена
+    if is_brt:
+        # Проверяем, что это понедельник
+        if date.weekday() != 0:
+            return []
+        
+        # Получаем занятые слоты
+        occupied_slots = get_occupied_slots(db, date, service_duration)
+        occupied_set = {slot for slot in occupied_slots}
+        
+        # Проверяем доступность фиксированных времен БРТ
+        available_slots = []
+        for time_str in BRT_TIME_SLOTS:
+            hour, minute = map(int, time_str.split(':'))
+            slot_time = date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # Проверяем, не занят ли этот слот
+            slot_occupied = False
+            check_time = slot_time
+            while check_time < slot_time + timedelta(minutes=service_duration):
+                if check_time in occupied_set:
+                    slot_occupied = True
+                    break
+                check_time += timedelta(minutes=30)
+            
+            if not slot_occupied:
+                available_slots.append(time_str)
+        
+        return available_slots
     
     # Получаем расписание для дня
     schedule = get_schedule_for_day(db, date, is_brt)

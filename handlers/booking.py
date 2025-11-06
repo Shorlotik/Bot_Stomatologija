@@ -46,18 +46,11 @@ class OrderBadsStates(StatesGroup):
 
 # Продолжительность услуг в минутах
 SERVICE_DURATIONS = {
-    "Консультация": 30,
-    "Лечение кариеса": 60,
-    "Лечение пульпита": 90,
+    "Лечение зубов": 60,
+    "Снятие зубных отложений": 60,
     "Профессиональная чистка зубов": 60,
-    "Отбеливание зубов": 90,
-    "Протезирование": 120,
-    "Имплантация": 120,
-    "Выявление дефицитов в организме по зубам": 60,
-    "Выявление дефицитов при помощи БРТ": 30,
-    "Подбор витаминов и минералов": 60,
+    "Консультация нутрициолога": 30,
     "БРТ": 30,
-    "Другое": 60,
 }
 
 
@@ -69,9 +62,9 @@ def get_service_keyboard(services: list[str]) -> InlineKeyboardMarkup:
     # Создаем маппинг для сокращенных callback_data
     service_mapping = {
         "Профессиональная чистка зубов": "clean",
-        "Выявление дефицитов в организме по зубам": "deficit_teeth",
-        "Выявление дефицитов при помощи БРТ": "deficit_brt",
-        "Подбор витаминов и минералов": "vitamins",
+        "Лечение зубов": "treatment",
+        "Снятие зубных отложений": "deposits",
+        "Консультация нутрициолога": "nutrition_consult",
     }
     
     for i, service in enumerate(services):
@@ -231,14 +224,9 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
         await state.update_data(selected_time=time_str)
         logger.info(f"Время {time_str} успешно выбрано для даты {selected_date}")
         
-        # Если услуга уже выбрана, переходим к подтверждению
-        if data.get("service_type"):
-            await state.set_state(BookingStates.confirmation)
-            await show_confirmation(callback, state)
-        else:
-            await state.set_state(BookingStates.waiting_for_service)
-            await show_service_selection(callback, state)
-        
+        # После выбора времени переходим к подтверждению
+        await state.set_state(BookingStates.confirmation)
+        await show_confirmation(callback, state)
         await callback.answer(f"✅ Выбрано время: {time_str}")
         
     except Exception as e:
@@ -324,23 +312,12 @@ async def show_confirmation(callback: CallbackQuery, state: FSMContext):
     comment = data.get("comment", "")
     
     # Проверяем, что все обязательные данные заполнены
-    if not full_name or not phone:
-        logger.warning(f"Не все данные заполнены: full_name={bool(full_name)}, phone={bool(phone)}")
+    if not full_name or not phone or not service_type:
+        logger.warning(f"Не все данные заполнены: full_name={bool(full_name)}, phone={bool(phone)}, service_type={bool(service_type)}")
         await callback.answer("❌ Ошибка: не все данные заполнены. Пожалуйста, начните запись заново.", show_alert=True)
-        # Возвращаемся к началу процесса
-        await state.set_state(BookingStates.waiting_for_name)
-        text = "📝 **Запись на приём**\n\nПожалуйста, введите ваше ФИО:"
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
-        ])
-        try:
-            await callback.message.edit_text(text, reply_markup=keyboard)
-        except:
-            await callback.bot.send_message(
-                chat_id=callback.from_user.id,
-                text=text,
-                reply_markup=keyboard
-            )
+        # Возвращаемся к выбору услуги
+        await state.set_state(BookingStates.waiting_for_service)
+        await show_service_selection(callback, state)
         return
     
     if selected_date:
@@ -532,14 +509,9 @@ async def callback_start_booking(callback: CallbackQuery, state: FSMContext):
             is_brt=is_brt,
             service_type_context=service_type_context
         )
-        await state.set_state(BookingStates.waiting_for_name)
-        
-        text = "📝 **Запись на приём**\n\nПожалуйста, введите ваше ФИО:"
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
-        ])
-        
-        await callback.message.edit_text(text, reply_markup=keyboard)
+        # Начинаем с выбора услуги
+        await state.set_state(BookingStates.waiting_for_service)
+        await show_service_selection(callback, state)
         await callback.answer()
         
     except Exception as e:
@@ -616,19 +588,13 @@ async def process_phone(message: Message, state: FSMContext):
     formatted_phone = format_phone(phone)
     await state.update_data(phone=formatted_phone)
     
+    # После ввода телефона переходим к выбору даты
     data = await state.get_data()
     is_brt = data.get("is_brt", False)
     
-    if is_brt:
-        # Для БРТ сразу переходим к выбору даты (только понедельники)
-        await state.set_state(BookingStates.waiting_for_date)
-        text = "📅 Выберите дату (доступны только понедельники):"
-        keyboard = get_calendar_keyboard()
-    else:
-        # Для обычной записи выбираем дату
-        await state.set_state(BookingStates.waiting_for_date)
-        text = "📅 Выберите дату:"
-        keyboard = get_calendar_keyboard()
+    await state.set_state(BookingStates.waiting_for_date)
+    text = "📅 Выберите дату:" + (" (доступны только понедельники)" if is_brt else "")
+    keyboard = get_calendar_keyboard()
     
     await message.answer(text, reply_markup=keyboard)
 
@@ -693,9 +659,9 @@ async def callback_service_select(callback: CallbackQuery, state: FSMContext):
         # Обратный маппинг для сокращенных кодов
         code_to_service = {
             "clean": "Профессиональная чистка зубов",
-            "deficit_teeth": "Выявление дефицитов в организме по зубам",
-            "deficit_brt": "Выявление дефицитов при помощи БРТ",
-            "vitamins": "Подбор витаминов и минералов",
+            "treatment": "Лечение зубов",
+            "deposits": "Снятие зубных отложений",
+            "nutrition_consult": "Консультация нутрициолога",
         }
         
         # Если это сокращенный код, получаем полное название
@@ -733,17 +699,26 @@ async def callback_service_select(callback: CallbackQuery, state: FSMContext):
             service_duration=service_duration
         )
         
-        # Переходим к комментарию (опционально)
-        await state.set_state(BookingStates.waiting_for_comment)
+        # После выбора услуги переходим к вводу ФИО
+        await state.set_state(BookingStates.waiting_for_name)
+        text = "📝 **Запись на приём**\n\nПожалуйста, введите ваше ФИО:"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="booking_skip_comment")],
             [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
         ])
         
-        await callback.message.edit_text(
-            "📝 Введите комментарий (или нажмите 'Пропустить'):",
-            reply_markup=keyboard
-        )
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard)
+        except Exception as e:
+            logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+            try:
+                await callback.message.delete()
+            except:
+                pass
+            await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=text,
+                reply_markup=keyboard
+            )
         await callback.answer()
         
     except Exception as e:

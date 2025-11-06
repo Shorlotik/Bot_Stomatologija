@@ -4,12 +4,9 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.auth.transport.requests import Request
-import json
-import os
 
 from config import config
 from utils.logger import logger
@@ -18,7 +15,6 @@ from utils.date_helpers import get_timezone
 
 # Области доступа для Google Calendar API
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-TOKEN_FILE = 'token.json'  # Файл для сохранения токенов
 
 
 class GoogleCalendarService:
@@ -31,36 +27,35 @@ class GoogleCalendarService:
         self._initialize_service()
     
     def _initialize_service(self):
-        """Инициализирует сервис Google Calendar с использованием token.json или refresh token."""
+        """Инициализирует сервис Google Calendar с использованием refresh token из .env."""
         try:
-            # Пробуем загрузить токены из файла
-            if os.path.exists(TOKEN_FILE):
-                with open(TOKEN_FILE, 'r') as token:
-                    token_data = json.load(token)
-                    self.credentials = Credentials.from_authorized_user_info(token_data, SCOPES)
-                    logger.info("Токены загружены из token.json")
-            # Если есть refresh token в .env, используем его
-            elif config.GOOGLE_REFRESH_TOKEN:
-                self.credentials = Credentials(
-                    token=None,
-                    refresh_token=config.GOOGLE_REFRESH_TOKEN,
-                    token_uri="https://oauth2.googleapis.com/token",
-                    client_id=config.GOOGLE_CLIENT_ID,
-                    client_secret=config.GOOGLE_CLIENT_SECRET,
-                    scopes=SCOPES
-                )
-                logger.info("Используется refresh token из .env")
-            else:
-                # Если нет токенов, пробуем авторизоваться через OAuth flow
-                logger.warning("Токены не найдены. Запускается OAuth flow...")
-                self._authorize_interactive()
+            # Используем refresh token из .env
+            if not config.GOOGLE_REFRESH_TOKEN:
+                logger.warning("GOOGLE_REFRESH_TOKEN не установлен в .env")
+                logger.warning("Бот будет работать без синхронизации с Google Calendar")
+                logger.info("Для получения refresh token запустите: python3 get_token.py")
+                self.service = None
                 return
+            
+            if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
+                logger.error("GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET не установлены")
+                logger.warning("Бот будет работать без синхронизации с Google Calendar")
+                self.service = None
+                return
+            
+            # Создаем credentials из refresh token
+            self.credentials = Credentials(
+                token=None,
+                refresh_token=config.GOOGLE_REFRESH_TOKEN,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=config.GOOGLE_CLIENT_ID,
+                client_secret=config.GOOGLE_CLIENT_SECRET,
+                scopes=SCOPES
+            )
             
             # Обновляем токен если нужно
             if self.credentials and self.credentials.expired and self.credentials.refresh_token:
                 self.credentials.refresh(Request())
-                # Сохраняем обновленные токены
-                self._save_credentials()
             
             # Создаём сервис
             if self.credentials:
@@ -74,60 +69,6 @@ class GoogleCalendarService:
             logger.error(f"Ошибка при инициализации Google Calendar сервиса: {e}")
             logger.warning("Бот будет работать без синхронизации с Google Calendar")
             self.service = None
-    
-    def _authorize_interactive(self):
-        """Интерактивная авторизация через браузер (только для первого запуска)."""
-        try:
-            if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
-                logger.error("GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET не установлены")
-                logger.warning("Бот будет работать без синхронизации с Google Calendar")
-                return
-            
-            # Проверяем, не в Docker ли мы (интерактивная авторизация не работает в Docker)
-            if os.path.exists('/.dockerenv'):
-                logger.warning("Интерактивная авторизация недоступна в Docker")
-                logger.info("Для работы с календарем:")
-                logger.info("1. Получите refresh token локально: python3 get_token.py")
-                logger.info("2. Добавьте GOOGLE_REFRESH_TOKEN в .env или скопируйте token.json в контейнер")
-                return
-            
-            flow = InstalledAppFlow.from_client_config(
-                {
-                    "installed": {
-                        "client_id": config.GOOGLE_CLIENT_ID,
-                        "client_secret": config.GOOGLE_CLIENT_SECRET,
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                        "redirect_uris": ["http://localhost"]
-                    }
-                },
-                SCOPES
-            )
-            
-            logger.info("Откройте браузер для авторизации...")
-            self.credentials = flow.run_local_server(port=0)
-            self._save_credentials()
-            logger.info("Авторизация успешна, токены сохранены в token.json")
-            
-        except Exception as e:
-            logger.error(f"Ошибка при авторизации: {e}")
-            self.service = None
-    
-    def _save_credentials(self):
-        """Сохраняет токены в файл token.json."""
-        if self.credentials:
-            token_data = {
-                'token': self.credentials.token,
-                'refresh_token': self.credentials.refresh_token,
-                'token_uri': self.credentials.token_uri,
-                'client_id': self.credentials.client_id,
-                'client_secret': self.credentials.client_secret,
-                'scopes': self.credentials.scopes
-            }
-            with open(TOKEN_FILE, 'w') as token:
-                json.dump(token_data, token)
-            logger.debug("Токены сохранены в token.json")
     
     def create_event(
         self,

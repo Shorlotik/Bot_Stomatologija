@@ -12,8 +12,6 @@ services:
       - ./database:/app/database
       # Сохраняем логи на хосте
       - ./logs:/app/logs
-      # Сохраняем токены Google OAuth (создастся автоматически при первой авторизации)
-      - ./token.json:/app/token.json
     environment:
       - PYTHONUNBUFFERED=1
     # Опционально: если используете PostgreSQL вместо SQLite
