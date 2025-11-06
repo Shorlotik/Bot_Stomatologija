@@ -536,7 +536,20 @@ async def callback_start_brt_booking(callback: CallbackQuery, state: FSMContext)
             [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
         ])
         
-        await callback.message.edit_text(text, reply_markup=keyboard)
+        try:
+            edited_msg = await callback.message.edit_text(text, reply_markup=keyboard)
+            # Сохраняем message_id для последующего редактирования
+            if edited_msg:
+                await state.update_data(bot_message_id=edited_msg.message_id)
+        except Exception as e:
+            logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+            sent_msg = await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=text,
+                reply_markup=keyboard
+            )
+            if sent_msg:
+                await state.update_data(bot_message_id=sent_msg.message_id)
         await callback.answer()
         
     except Exception as e:
@@ -562,13 +575,32 @@ async def process_name(message: Message, state: FSMContext):
     await state.update_data(full_name=full_name)
     await state.set_state(BookingStates.waiting_for_phone)
     
-    await message.answer(
-        "📞 Введите ваш номер телефона:\n\n"
-        "Формат: +375291234567 или 80291234567",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
-        ])
-    )
+    # Редактируем предыдущее сообщение бота вместо создания нового
+    data = await state.get_data()
+    bot_message_id = data.get("bot_message_id")
+    
+    text = "📞 Введите ваш номер телефона:\n\nФормат: +375291234567 или 80291234567"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+    ])
+    
+    if bot_message_id:
+        try:
+            await message.bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=bot_message_id,
+                text=text,
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+            sent_msg = await message.answer(text, reply_markup=keyboard)
+            if sent_msg:
+                await state.update_data(bot_message_id=sent_msg.message_id)
+    else:
+        sent_msg = await message.answer(text, reply_markup=keyboard)
+        if sent_msg:
+            await state.update_data(bot_message_id=sent_msg.message_id)
 
 
 @router.message(BookingStates.waiting_for_phone)
@@ -591,12 +623,30 @@ async def process_phone(message: Message, state: FSMContext):
     # После ввода телефона переходим к выбору даты
     data = await state.get_data()
     is_brt = data.get("is_brt", False)
+    bot_message_id = data.get("bot_message_id")
     
     await state.set_state(BookingStates.waiting_for_date)
     text = "📅 Выберите дату:" + (" (доступны только понедельники)" if is_brt else "")
     keyboard = get_calendar_keyboard()
     
-    await message.answer(text, reply_markup=keyboard)
+    # Редактируем предыдущее сообщение бота вместо создания нового
+    if bot_message_id:
+        try:
+            await message.bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=bot_message_id,
+                text=text,
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+            sent_msg = await message.answer(text, reply_markup=keyboard)
+            if sent_msg:
+                await state.update_data(bot_message_id=sent_msg.message_id)
+    else:
+        sent_msg = await message.answer(text, reply_markup=keyboard)
+        if sent_msg:
+            await state.update_data(bot_message_id=sent_msg.message_id)
 
 
 @router.message(BookingStates.waiting_for_comment)
@@ -707,18 +757,24 @@ async def callback_service_select(callback: CallbackQuery, state: FSMContext):
         ])
         
         try:
-            await callback.message.edit_text(text, reply_markup=keyboard)
+            edited_msg = await callback.message.edit_text(text, reply_markup=keyboard)
+            # Сохраняем message_id для последующего редактирования
+            if edited_msg:
+                await state.update_data(bot_message_id=edited_msg.message_id)
         except Exception as e:
             logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
             try:
                 await callback.message.delete()
             except:
                 pass
-            await callback.bot.send_message(
+            sent_msg = await callback.bot.send_message(
                 chat_id=callback.from_user.id,
                 text=text,
                 reply_markup=keyboard
             )
+            # Сохраняем message_id нового сообщения
+            if sent_msg:
+                await state.update_data(bot_message_id=sent_msg.message_id)
         await callback.answer()
         
     except Exception as e:
