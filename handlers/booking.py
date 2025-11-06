@@ -316,9 +316,13 @@ async def show_confirmation(callback: CallbackQuery, state: FSMContext):
     service_type = data.get("service_type", "")
     comment = data.get("comment", "")
     
+    logger.info(f"Показ подтверждения для пользователя {callback.from_user.id}: full_name={bool(full_name)}, phone={bool(phone)}, service_type={service_type}, selected_date={selected_date}, selected_time={selected_time}")
+    logger.debug(f"Все данные состояния: {data}")
+    
     # Проверяем, что все обязательные данные заполнены
     if not full_name or not phone or not service_type:
         logger.warning(f"Не все данные заполнены: full_name={bool(full_name)}, phone={bool(phone)}, service_type={bool(service_type)}")
+        logger.warning(f"Полные данные: full_name='{full_name}', phone='{phone}', service_type='{service_type}'")
         await callback.answer("❌ Ошибка: не все данные заполнены. Пожалуйста, начните запись заново.", show_alert=True)
         # Возвращаемся к выбору услуги
         await state.set_state(BookingStates.waiting_for_service)
@@ -776,10 +780,16 @@ async def callback_service_select(callback: CallbackQuery, state: FSMContext):
         
         service_duration = SERVICE_DURATIONS.get(service_type, 60)
         
+        logger.info(f"Выбрана услуга: {service_type}, длительность: {service_duration} минут для пользователя {callback.from_user.id}")
+        
         await state.update_data(
             service_type=service_type,
             service_duration=service_duration
         )
+        
+        # Проверяем, что данные сохранились
+        check_data = await state.get_data()
+        logger.debug(f"Данные после сохранения услуги: service_type={check_data.get('service_type')}, service_duration={check_data.get('service_duration')}")
         
         # После выбора услуги переходим к вводу ФИО
         await state.set_state(BookingStates.waiting_for_name)
