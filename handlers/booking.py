@@ -533,7 +533,10 @@ async def callback_start_brt_booking(callback: CallbackQuery, state: FSMContext)
         
         text = "🔬 **Запись на сеанс БРТ**\n\nПожалуйста, введите ваше ФИО:"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+            [
+                InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_service"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+            ]
         ])
         
         try:
@@ -587,7 +590,10 @@ async def process_name(message: Message, state: FSMContext):
     
     text = "📞 Введите ваш номер телефона:\n\nФормат: +375291234567 или 80291234567"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_name"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+        ]
     ])
     
     if bot_message_id:
@@ -765,7 +771,10 @@ async def callback_service_select(callback: CallbackQuery, state: FSMContext):
         await state.set_state(BookingStates.waiting_for_name)
         text = "📝 **Запись на приём**\n\nПожалуйста, введите ваше ФИО:"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+            [
+                InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_service"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+            ]
         ])
         
         try:
@@ -792,6 +801,42 @@ async def callback_service_select(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"Ошибка в обработчике service_select: {e}")
         await callback.answer("Произошла ошибка", show_alert=True)
+
+
+@router.callback_query(F.data == "booking_back_to_service")
+async def callback_back_to_service(callback: CallbackQuery, state: FSMContext):
+    """Обработчик возврата к выбору услуги."""
+    await state.set_state(BookingStates.waiting_for_service)
+    await show_service_selection(callback, state)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "booking_back_to_name")
+async def callback_back_to_name(callback: CallbackQuery, state: FSMContext):
+    """Обработчик возврата к вводу ФИО."""
+    await state.set_state(BookingStates.waiting_for_name)
+    text = "📝 **Запись на приём**\n\nПожалуйста, введите ваше ФИО:"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_service"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+        ]
+    ])
+    
+    try:
+        edited_msg = await callback.message.edit_text(text, reply_markup=keyboard)
+        if edited_msg:
+            await state.update_data(bot_message_id=edited_msg.message_id)
+    except Exception as e:
+        logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+        sent_msg = await callback.bot.send_message(
+            chat_id=callback.from_user.id,
+            text=text,
+            reply_markup=keyboard
+        )
+        if sent_msg:
+            await state.update_data(bot_message_id=sent_msg.message_id)
+    await callback.answer()
 
 
 @router.callback_query(F.data == "booking_back_to_date")
