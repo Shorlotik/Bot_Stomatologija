@@ -106,13 +106,50 @@ def get_service_keyboard(services: list[str], service_type_context: str = "denti
 async def callback_calendar_select(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора даты в календаре."""
     try:
+        # Проверяем, что ФИО и телефон уже введены
+        data = await state.get_data()
+        full_name = data.get("full_name", "")
+        phone = data.get("phone", "")
+        service_type = data.get("service_type", "")
+        
+        if not full_name or not phone or not service_type:
+            logger.warning(f"Попытка выбрать дату без заполненных данных: full_name={bool(full_name)}, phone={bool(phone)}, service_type={bool(service_type)}")
+            await callback.answer("❌ Сначала введите ФИО и телефон", show_alert=True)
+            # Возвращаемся к вводу ФИО
+            if not full_name:
+                await state.set_state(BookingStates.waiting_for_name)
+                text = "📝 **Запись на приём**\n\nПожалуйста, введите ваше ФИО:"
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_service"),
+                        InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+                    ]
+                ])
+                try:
+                    await callback.message.edit_text(text, reply_markup=keyboard)
+                except:
+                    await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+            elif not phone:
+                await state.set_state(BookingStates.waiting_for_phone)
+                text = "📞 Введите ваш номер телефона:\n\nФормат: +375291234567 или 80291234567"
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_name"),
+                        InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+                    ]
+                ])
+                try:
+                    await callback.message.edit_text(text, reply_markup=keyboard)
+                except:
+                    await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+            return
+        
         date_str = callback.data.split("_")[-1]
         selected_date = datetime.strptime(date_str, "%Y-%m-%d")
         tz = get_timezone()
         selected_date = tz.localize(selected_date)
         
         # Сохраняем выбранную дату
-        data = await state.get_data()
         is_brt = data.get("is_brt", False)
         
         # Проверяем доступность даты
@@ -181,7 +218,43 @@ async def callback_time_select(callback: CallbackQuery, state: FSMContext):
         data = await state.get_data()
         logger.debug(f"Данные состояния: {data}")
         
+        # Проверяем, что все обязательные данные заполнены
+        full_name = data.get("full_name", "")
+        phone = data.get("phone", "")
+        service_type = data.get("service_type", "")
         selected_date = data.get("selected_date")
+        
+        if not full_name or not phone or not service_type:
+            logger.warning(f"Попытка выбрать время без заполненных данных: full_name={bool(full_name)}, phone={bool(phone)}, service_type={bool(service_type)}")
+            await callback.answer("❌ Сначала введите ФИО и телефон", show_alert=True)
+            # Возвращаемся к вводу ФИО
+            if not full_name:
+                await state.set_state(BookingStates.waiting_for_name)
+                text = "📝 **Запись на приём**\n\nПожалуйста, введите ваше ФИО:"
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_service"),
+                        InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+                    ]
+                ])
+                try:
+                    await callback.message.edit_text(text, reply_markup=keyboard)
+                except:
+                    await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+            elif not phone:
+                await state.set_state(BookingStates.waiting_for_phone)
+                text = "📞 Введите ваш номер телефона:\n\nФормат: +375291234567 или 80291234567"
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="⬅️ Назад", callback_data="booking_back_to_name"),
+                        InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
+                    ]
+                ])
+                try:
+                    await callback.message.edit_text(text, reply_markup=keyboard)
+                except:
+                    await callback.bot.send_message(callback.from_user.id, text, reply_markup=keyboard)
+            return
         
         # Если дата не найдена, пытаемся восстановить из callback или запросить у пользователя
         if not selected_date:
