@@ -830,6 +830,12 @@ async def callback_service_select(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "booking_back_to_service")
 async def callback_back_to_service(callback: CallbackQuery, state: FSMContext):
     """Обработчик возврата к выбору услуги."""
+    # Сохраняем текущие данные перед возвратом
+    data = await state.get_data()
+    logger.info(f"Возврат к выбору услуги для пользователя {callback.from_user.id}. Текущие данные: service_type={data.get('service_type')}, full_name={data.get('full_name')}, phone={data.get('phone')}")
+    
+    # Очищаем только service_type при возврате к выбору услуги, остальные данные сохраняем
+    # (на случай, если пользователь хочет изменить только услугу)
     await state.set_state(BookingStates.waiting_for_service)
     await show_service_selection(callback, state)
     await callback.answer()
