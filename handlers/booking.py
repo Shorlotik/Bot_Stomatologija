@@ -575,6 +575,12 @@ async def process_name(message: Message, state: FSMContext):
     await state.update_data(full_name=full_name)
     await state.set_state(BookingStates.waiting_for_phone)
     
+    # Удаляем сообщение пользователя с ФИО
+    try:
+        await message.delete()
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение пользователя: {e}")
+    
     # Редактируем предыдущее сообщение бота вместо создания нового
     data = await state.get_data()
     bot_message_id = data.get("bot_message_id")
@@ -619,6 +625,12 @@ async def process_phone(message: Message, state: FSMContext):
     
     formatted_phone = format_phone(phone)
     await state.update_data(phone=formatted_phone)
+    
+    # Удаляем сообщение пользователя с телефоном
+    try:
+        await message.delete()
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение пользователя: {e}")
     
     # После ввода телефона переходим к выбору даты
     data = await state.get_data()
