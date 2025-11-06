@@ -150,54 +150,12 @@ async def callback_nutrition_info(callback: CallbackQuery):
 # для единообразного процесса записи (выбор услуги -> ФИО -> телефон -> дата -> время)
 
 
-@router.callback_query(F.data == "nutrition_brt")
-async def callback_nutrition_brt(callback: CallbackQuery):
-    """Обработчик начала процесса записи на БРТ."""
-    try:
-        text = (
-            "🔬 **Запись на сеанс БРТ**\n\n"
-            "БРТ (Биорезонансная терапия) доступна только по понедельникам с 11:00 до 15:00.\n\n"
-            "Продолжительность сеанса: 30 минут.\n\n"
-            "Выберите дату (доступны только понедельники):"
-        )
-        keyboard = get_calendar_keyboard()
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=keyboard
-        )
-        await callback.answer()
-        # TODO: Здесь будет сохранение состояния для процесса записи на БРТ
-    except Exception as e:
-        logger.error(f"Ошибка в обработчике nutrition_brt: {e}")
-        await callback.answer("Произошла ошибка", show_alert=True)
+# Обработчик nutrition_brt перенесен в handlers/booking.py
+# для единообразного процесса записи (ФИО -> телефон -> дата -> время)
 
 
-@router.callback_query(F.data == "nutrition_order_bads")
-async def callback_nutrition_order_bads(callback: CallbackQuery):
-    """Обработчик начала процесса заказа БАДов."""
-    try:
-        text = (
-            "📦 **Заказ БАДов NSP**\n\n"
-            "Пожалуйста, введите ваши данные для заказа.\n\n"
-            "Введите ФИО:"
-        )
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="❌ Отмена", callback_data="menu_nutrition")
-            ]
-        ])
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=keyboard
-        )
-        await callback.answer()
-        # TODO: Здесь будет сохранение состояния для процесса заказа
-    except Exception as e:
-        logger.error(f"Ошибка в обработчике nutrition_order_bads: {e}")
-        await callback.answer("Произошла ошибка", show_alert=True)
+# Обработчик nutrition_order_bads перенесен в handlers/booking.py
+# для единообразного процесса заказа (ФИО -> телефон -> продукты -> комментарий)
 
 
 def register_nutrition_handlers(dp):
