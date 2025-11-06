@@ -978,6 +978,7 @@ async def callback_skip_comment(callback: CallbackQuery, state: FSMContext):
 async def callback_start_order_bads(callback: CallbackQuery, state: FSMContext):
     """Начинает процесс заказа БАДов."""
     try:
+        logger.info(f"Начало заказа БАДов для пользователя {callback.from_user.id}")
         await state.set_state(OrderBadsStates.waiting_for_name)
         
         text = "📦 **Заказ БАДов NSP**\n\nПожалуйста, введите ваше ФИО:"
@@ -985,38 +986,93 @@ async def callback_start_order_bads(callback: CallbackQuery, state: FSMContext):
             [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
         ])
         
-        await callback.message.edit_text(text, reply_markup=keyboard)
+        try:
+            edited_msg = await callback.message.edit_text(text, reply_markup=keyboard)
+            if edited_msg:
+                await state.update_data(bot_message_id=edited_msg.message_id)
+            logger.info(f"Сообщение для заказа БАДов отправлено пользователю {callback.from_user.id}")
+        except Exception as e:
+            logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+            sent_msg = await callback.bot.send_message(
+                chat_id=callback.from_user.id,
+                text=text,
+                reply_markup=keyboard
+            )
+            if sent_msg:
+                await state.update_data(bot_message_id=sent_msg.message_id)
+        
         await callback.answer()
         
     except Exception as e:
-        logger.error(f"Ошибка в обработчике start_order_bads: {e}")
+        logger.error(f"Ошибка в обработчике start_order_bads: {e}", exc_info=True)
         await callback.answer("Произошла ошибка", show_alert=True)
 
 
 @router.message(OrderBadsStates.waiting_for_name)
 async def process_order_name(message: Message, state: FSMContext):
     """Обработчик ввода ФИО для заказа."""
-    full_name = message.text.strip()
-    
-    if not validate_full_name(full_name):
+    try:
+        logger.info(f"Обработка ФИО для заказа от пользователя {message.from_user.id}: {message.text}")
+        full_name = message.text.strip()
+        
+        if not validate_full_name(full_name):
+            logger.warning(f"Некорректное ФИО: {full_name}")
+            await message.answer(
+                get_name_validation_error(),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+                ])
+            )
+            return
+        
+        await state.update_data(full_name=full_name)
+        await state.set_state(OrderBadsStates.waiting_for_phone)
+        
+        # Удаляем сообщение пользователя с ФИО
+        try:
+            await message.delete()
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщение пользователя: {e}")
+        
+        # Редактируем предыдущее сообщение бота вместо создания нового
+        data = await state.get_data()
+        bot_message_id = data.get("bot_message_id")
+        
+        text = "📞 Введите ваш номер телефона:\n\nФормат: +375291234567 или 80291234567"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
+        ])
+        
+        if bot_message_id:
+            try:
+                edited_msg = await message.bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=bot_message_id,
+                    text=text,
+                    reply_markup=keyboard
+                )
+                if edited_msg:
+                    await state.update_data(bot_message_id=edited_msg.message_id)
+                logger.info(f"Сообщение бота отредактировано для пользователя {message.from_user.id}")
+            except Exception as e:
+                logger.warning(f"Не удалось отредактировать сообщение: {e}, отправляем новое")
+                sent_msg = await message.answer(text, reply_markup=keyboard)
+                if sent_msg:
+                    await state.update_data(bot_message_id=sent_msg.message_id)
+        else:
+            sent_msg = await message.answer(text, reply_markup=keyboard)
+            if sent_msg:
+                await state.update_data(bot_message_id=sent_msg.message_id)
+        
+        logger.info(f"ФИО успешно обработано для заказа от пользователя {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Ошибка в обработчике process_order_name: {e}", exc_info=True)
         await message.answer(
-            get_name_validation_error(),
+            "❌ Произошла ошибка при обработке данных. Попробуйте еще раз.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
             ])
         )
-        return
-    
-    await state.update_data(full_name=full_name)
-    await state.set_state(OrderBadsStates.waiting_for_phone)
-    
-    await message.answer(
-        "📞 Введите ваш номер телефона:\n\n"
-        "Формат: +375291234567 или 80291234567",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")]
-        ])
-    )
 
 
 @router.message(OrderBadsStates.waiting_for_phone)
