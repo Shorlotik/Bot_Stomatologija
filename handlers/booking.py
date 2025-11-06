@@ -54,7 +54,7 @@ SERVICE_DURATIONS = {
 }
 
 
-def get_service_keyboard(services: list[str]) -> InlineKeyboardMarkup:
+def get_service_keyboard(services: list[str], service_type_context: str = "dentistry") -> InlineKeyboardMarkup:
     """Создаёт клавиатуру выбора услуги."""
     keyboard = []
     row = []
@@ -90,7 +90,11 @@ def get_service_keyboard(services: list[str]) -> InlineKeyboardMarkup:
     if row:
         keyboard.append(row)
     
+    # Определяем callback для кнопки "Назад" в зависимости от контекста
+    back_callback = "menu_dentistry" if service_type_context == "dentistry" else "menu_nutrition"
+    
     keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback),
         InlineKeyboardButton(text="❌ Отмена", callback_data="booking_cancel")
     ])
     
@@ -253,7 +257,8 @@ async def show_service_selection(callback: CallbackQuery, state: FSMContext):
                 services = NUTRITION_SERVICES
         
         text = "💼 Выберите тип услуги:"
-        keyboard = get_service_keyboard(services)
+        service_type_context = data.get("service_type_context", "dentistry")
+        keyboard = get_service_keyboard(services, service_type_context)
         
         # Проверяем валидность callback_data перед отправкой
         for row in keyboard.inline_keyboard:
