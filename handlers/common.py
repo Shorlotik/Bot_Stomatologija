@@ -44,6 +44,31 @@ async def cmd_contacts(message: Message):
         logger.error(f"Ошибка в обработчике /contacts: {e}")
 
 
+@router.message(F.text)
+async def handle_unhandled_message(message: Message):
+    """Обработчик необработанных текстовых сообщений."""
+    try:
+        # Проверяем, не находится ли пользователь в процессе записи/заказа
+        # Если да, то этот обработчик не должен срабатывать
+        # (обработчики FSM имеют приоритет)
+        
+        help_text = format_info_message(
+            "👋 Для работы с ботом используйте кнопки меню.\n\n"
+            "Нажмите /start, чтобы открыть главное меню."
+        )
+        
+        from keyboards.main import get_main_menu_keyboard
+        keyboard = get_main_menu_keyboard()
+        
+        await message.answer(
+            help_text,
+            reply_markup=keyboard
+        )
+        logger.info(f"Пользователь {message.from_user.id} отправил необработанное сообщение: {message.text[:50]}")
+    except Exception as e:
+        logger.error(f"Ошибка в обработчике необработанных сообщений: {e}")
+
+
 def register_common_handlers(dp):
     """Регистрирует общие обработчики."""
     dp.include_router(router)

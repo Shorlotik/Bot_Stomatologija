@@ -30,19 +30,20 @@ async def main():
         dp = Dispatcher()
         
         # Регистрация handlers
+        # Важно: common handlers регистрируются последними, чтобы не перехватывать FSM обработчики
         from handlers.start import register_start_handlers
-        from handlers.common import register_common_handlers
         from handlers.dentistry import register_dentistry_handlers
         from handlers.nutrition import register_nutrition_handlers
         from handlers.booking import register_booking_handlers
         from handlers.admin import register_admin_handlers
+        from handlers.common import register_common_handlers
         
         register_start_handlers(dp)
-        register_common_handlers(dp)
         register_dentistry_handlers(dp)
         register_nutrition_handlers(dp)
-        register_booking_handlers(dp)
+        register_booking_handlers(dp)  # FSM обработчики должны быть зарегистрированы раньше
         register_admin_handlers(dp)
+        register_common_handlers(dp)  # Обработчик необработанных сообщений регистрируется последним
         
         logger.info("Бот запущен и готов к работе")
         
