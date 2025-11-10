@@ -201,10 +201,19 @@ def calculate_time_slots(
     occupied_slots = get_occupied_slots(db, date, service_duration)
     occupied_set = {slot for slot in occupied_slots}
     
-    # Генерируем доступные слоты (каждые 30 минут)
+    # Генерируем доступные слоты (только целые часы: 09:00, 10:00, 11:00 и т.д.)
     available_slots = []
-    current_time = work_start
     
+    # Начинаем с первого целого часа от начала смены
+    # Если смена начинается в 09:00, начинаем с 09:00
+    # Если смена начинается в 13:00, начинаем с 13:00
+    current_time = work_start.replace(minute=0, second=0, microsecond=0)
+    
+    # Если начало смены не на целый час, начинаем со следующего целого часа
+    if work_start.minute != 0:
+        current_time = current_time + timedelta(hours=1)
+    
+    # Генерируем слоты по целым часам
     while current_time + timedelta(minutes=service_duration) <= work_end:
         # Проверяем, не пересекается ли слот с занятыми
         slot_occupied = False
@@ -218,7 +227,8 @@ def calculate_time_slots(
         if not slot_occupied:
             available_slots.append(current_time.strftime("%H:%M"))
         
-        current_time += timedelta(minutes=30)
+        # Переходим к следующему целому часу
+        current_time += timedelta(hours=1)
     
     return available_slots
 
