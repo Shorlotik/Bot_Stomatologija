@@ -583,45 +583,32 @@ async def callback_booking_cancel(callback: CallbackQuery, state: FSMContext):
 async def callback_start_booking(callback: CallbackQuery, state: FSMContext):
     """Начинает процесс записи на приём."""
     try:
-        # Проверяем текущее состояние - если пользователь уже в процессе записи,
-        # сохраняем введенные данные (ФИО, телефон) и только очищаем service_type
+        # Проверяем текущие данные - если пользователь уже вводил ФИО и телефон,
+        # сохраняем их при начале новой записи
         current_data = await state.get_data()
-        current_state = await state.get_state()
         
         # Определяем тип записи
         is_brt = False
         service_type_context = "dentistry" if callback.data == "dentistry_book" else "nutrition"
         
-        # Если пользователь уже был в процессе записи, сохраняем ФИО и телефон
-        if current_state and current_state in [BookingStates.waiting_for_service, BookingStates.waiting_for_name, 
-                                                 BookingStates.waiting_for_phone, BookingStates.waiting_for_date,
-                                                 BookingStates.waiting_for_time, BookingStates.waiting_for_comment,
-                                                 BookingStates.confirmation]:
-            # Сохраняем важные данные перед очисткой
-            saved_full_name = current_data.get("full_name")
-            saved_phone = current_data.get("phone")
-            
-            # Очищаем состояние, но сохраняем ФИО и телефон если они есть
-            await state.clear()
-            
-            # Восстанавливаем сохраненные данные
-            update_data = {
-                "is_brt": is_brt,
-                "service_type_context": service_type_context
-            }
-            if saved_full_name:
-                update_data["full_name"] = saved_full_name
-            if saved_phone:
-                update_data["phone"] = saved_phone
-            
-            await state.update_data(**update_data)
-        else:
-            # Если это новый старт, просто очищаем и устанавливаем базовые данные
-            await state.clear()
-            await state.update_data(
-                is_brt=is_brt,
-                service_type_context=service_type_context
-            )
+        # Сохраняем важные данные перед очисткой (если они есть)
+        saved_full_name = current_data.get("full_name")
+        saved_phone = current_data.get("phone")
+        
+        # Очищаем состояние
+        await state.clear()
+        
+        # Восстанавливаем сохраненные данные (ФИО и телефон) если они были введены
+        update_data = {
+            "is_brt": is_brt,
+            "service_type_context": service_type_context
+        }
+        if saved_full_name:
+            update_data["full_name"] = saved_full_name
+        if saved_phone:
+            update_data["phone"] = saved_phone
+        
+        await state.update_data(**update_data)
         
         # Начинаем с выбора услуги
         await state.set_state(BookingStates.waiting_for_service)
