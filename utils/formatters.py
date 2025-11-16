@@ -64,7 +64,7 @@ def format_contact_info() -> str:
     text += f"👩‍⚕️ {format_bold('Врач:')} Прокопчик Людмила Николаевна\n"
     text += f"💼 {format_bold('Специализация:')} Стоматолог, Биолог, Нутрициолог\n"
     text += f"📞 {format_bold('Телефон:')} +375333647345\n"
-    text += f"📧 {format_bold('Email:')} tgstamotolognsp@gmail.com\n"
+    text += f"📧 {format_bold('Email:')} Liudmila.nsp75@gmail.com\n"
     text += f"📍 {format_bold('Адрес:')} г. Пружаны, ул. Юбилейная 12а-2\n"
     text += f"\n✨ {format_italic('Ваша улыбка - моя работа')}"
     
